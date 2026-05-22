@@ -1,5 +1,5 @@
 import React from 'react';
-import ScholarAI from './ScholarAI';
+import PrepHiveAI from './PrepHiveAI';
 export default function App() {
-  return <ScholarAI />;
+  return <PrepHiveAI />;
 }

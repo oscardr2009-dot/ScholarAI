@@ -658,7 +658,7 @@ function CodingPanel({ onSendPrompt, onClose }) {
         </div>
         <textarea
           className="cp-ta"
-          placeholder={`Describe your ${selLang} task…\n\nExamples:\n• Write a function that calculates GPA\n• Explain what a for loopwith an example\n• Help me build a simple calculator\n• Debug this code: [paste code here]`}
+          placeholder={`Describe your ${selLang} task…\n\nExamples:\n• Write a function that calculates GPA\n• Explain what a for loop with an example\n• Help me build a simple calculator\n• Debug this code: [paste code here]`}
           value={codeTask}
           onChange={(e) => setCodeTask(e.target.value)}
           rows={5}

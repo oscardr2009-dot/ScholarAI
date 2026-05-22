@@ -988,7 +988,7 @@ export default function PrepHiveAI() {
     updateChatMsgs(cid, (m) => [...m, vm]);
     setLoading(true);
     try {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
+      const r = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1101,7 +1101,7 @@ export default function PrepHiveAI() {
         role: m.role,
         content: buildC(m),
       }));
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
+      const r = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

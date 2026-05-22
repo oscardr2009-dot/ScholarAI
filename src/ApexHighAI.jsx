@@ -95,7 +95,7 @@ const CODING_LANGS = [
   'React',
   'Swift',
 ];
-const SYSTEM_PROMPT = `You are PrepHiveAI, a friendly, knowledgeable, and highly encouraging AI assistant built to help high school students across the United States.
+const SYSTEM_PROMPT = `You are ApexHighAI, a friendly, knowledgeable, and highly encouraging AI assistant built to help high school students across the United States.
 
 LANGUAGE RULE: Always respond in the same language the student uses, or their selected language. Be fully fluent in all languages.
 
@@ -345,12 +345,12 @@ function Landing({ onContinue }) {
       <div className="land-card">
         <div className="land-logo">
           <div className="land-icon">🎓</div>
-          <span className="land-title">PrepHiveAI</span>
+          <span className="land-title">ApexHighAI</span>
         </div>
         <div className="land-badge">High School AI · US Edition</div>
         {mode === 'home' && (
           <>
-            <h1 className="land-h">Welcome to PrepHiveAI</h1>
+            <h1 className="land-h">Welcome to ApexHighAI</h1>
             <p className="land-sub">
               Your smartest study partner — SAT prep, coding help, projects,
               college planning & more. Sign in or jump in as a guest.
@@ -533,7 +533,7 @@ function Onboarding({ user, onStart }) {
       <div className="ob-card">
         <div className="logo-lk">
           <div className="logo-ic">🎓</div>
-          <span className="logo-tx">PrepHiveAI</span>
+          <span className="logo-tx">ApexHighAI</span>
         </div>
         <div className="logo-tag">High School AI Assistant · US Edition</div>
         {user && (
@@ -600,7 +600,7 @@ function Onboarding({ user, onStart }) {
           )}
         </div>
         <button className="s-btn" onClick={go}>
-          Start Using PrepHiveAI →
+          Start Using ApexHighAI →
         </button>
         <div className="t-strip">
           <span>🔒 Private</span>
@@ -668,7 +668,7 @@ function CodingPanel({ onSendPrompt, onClose }) {
             Cancel
           </button>
           <button className="cp-go" onClick={go} disabled={!codeTask.trim()}>
-            Ask PrepHiveAI →
+            Ask ApexHighAI →
           </button>
         </div>
       </div>
@@ -777,7 +777,7 @@ function ProjectPanel({
 }
 
 // ─── MAIN APP ────────────────────────────────────────────────────────────────
-export default function PrepHiveAI() {
+export default function ApexHighAI() {
   const [screen, setScreen] = useState('landing');
   const [user, setUser] = useState(null);
   const [grade, setGrade] = useState('');
@@ -1187,8 +1187,8 @@ export default function PrepHiveAI() {
     const gl = GRADE_OPTIONS.find((o) => o.value === g)?.label || '';
     const welcome =
       g === 'prefer_not'
-        ? "Hey there! 👋 I'm **PrepHiveAI** — your personal high school AI. You can chat, drop files, take photos, upload videos, write code, or manage projects. *I respond in any language!*"
-        : `Hey! 👋 I'm **PrepHiveAI**, your guide for **${gl}**. Chat, upload files/photos/videos, get coding help, or start a project — I've got you! *I speak every language!*`;
+        ? "Hey there! 👋 I'm **ApexHighAI** — your personal high school AI. You can chat, drop files, take photos, upload videos, write code, or manage projects. *I respond in any language!*"
+        : `Hey! 👋 I'm **ApexHighAI**, your guide for **${gl}**. Chat, upload files/photos/videos, get coding help, or start a project — I've got you! *I speak every language!*`;
     const id = uid();
     const chat = {
       id,
@@ -1646,7 +1646,7 @@ export default function PrepHiveAI() {
             <div className="sb-top">
               <div className="sb-logo">
                 <div className="sb-logo-ic">🎓</div>
-                <span className="sb-logo-tx">PrepHiveAI</span>
+                <span className="sb-logo-tx">ApexHighAI</span>
               </div>
               <button
                 className="sb-new"
@@ -1797,7 +1797,7 @@ export default function PrepHiveAI() {
                 ☰
               </button>
               <span className="tb-title">
-                {activeChat?.title || 'PrepHiveAI'}
+                {activeChat?.title || 'ApexHighAI'}
               </span>
               <div className="tb-right">
                 {grade && grade !== 'prefer_not' && (
@@ -2042,7 +2042,7 @@ export default function PrepHiveAI() {
                   </button>
                 </div>
                 <p className="disc">
-                  PrepHiveAI · AI-powered · All languages supported · Always
+                  ApexHighAI · AI-powered · All languages supported · Always
                   verify important info with your school
                 </p>
               </div>

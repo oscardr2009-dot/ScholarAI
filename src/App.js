@@ -1,5 +1,5 @@
 import React from 'react';
-import PrepHiveAI from './PrepHiveAI';
+import ApexHighAI from './ApexHighAI';
 export default function App() {
-  return <PrepHiveAI />;
+  return <ApexHighAI />;
 }

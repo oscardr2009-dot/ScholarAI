@@ -3,7 +3,7 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "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",
+  apiKey: "AIzaSyByf6R9Y4Dd0xfJHA9QKlOLmqOPRFgLH2c",
   authDomain: "apexhighai.firebaseapp.com",
   projectId: "apexhighai",
   storageBucket: "apexhighai.firebasestorage.app",

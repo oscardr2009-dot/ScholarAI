@@ -170,6 +170,10 @@ function MsgBubble({ msg }) {
 
 // ─── ABOUT US PAGE ────────────────────────────────────────────────────────────
 function AboutUs({ onBack }) {
+  useEffect(() => {
+    document.body.classList.add('scrollable');
+    return () => document.body.classList.remove('scrollable');
+  }, []);
   const features = [
     { icon: '📝', title: 'SAT & ACT Prep', desc: 'Personalized study plans, practice strategies, and section-by-section breakdowns to maximize your score.' },
     { icon: '🏫', title: 'College Planning', desc: 'From building your college list to writing standout essays and understanding financial aid — we guide you every step.' },
@@ -341,7 +345,7 @@ function HomePage({ onGoGrade, onGoLogin, onGoAbout, onGoChat }) {
 
       {/* Ask anything bar (visual, prompts login/grade first) */}
       <div className="hp-input-area">
-        <div className="hp-iinner" onClick={onGoGrade}>
+        <div className="hp-iinner" onClick={onGoChat.bind(null, null)}>
           <span className="hp-input-placeholder">Ask anything… or drop a file, photo, PDF, or video</span>
           <button className="hp-send-btn">↑</button>
         </div>
@@ -811,24 +815,40 @@ export default function ApexHighAI() {
   };
 
   // ── Flow handlers ──
-  // From home: clicking a quick topic goes to grade selector first, then chat
   const handleHomeQuickTopic = (prompt) => {
-    setPendingPrompt(prompt);
-    setScreen('grade');
+    const welcome = "Hey there! 👋 I'm **ApexHighAI** — your personal high school AI. You can chat, drop files, take photos, upload videos, write code, or manage projects. *I respond in any language!*";
+    const id = uid();
+    const chat = { id, title: prompt ? 'New Chat' : 'Welcome', msgs: [{ role: 'assistant', content: welcome }], ts: Date.now() };
+    setChats([chat]);
+    setActiveCid(id);
+    setScreen('chat');
+    if (prompt) {
+      setTimeout(() => sendWithId(id, [{ role: 'assistant', content: welcome }], prompt), 200);
+    }
   };
 
-  // From home: clicking the input bar goes to grade selector
+  // From home: clicking the input bar goes straight to chat
   const handleHomeInputClick = () => {
-    setScreen('grade');
+    const welcome = "Hey there! 👋 I'm **ApexHighAI** — your personal high school AI. You can chat, drop files, take photos, upload videos, write code, or manage projects. *I respond in any language!*";
+    const id = uid();
+    const chat = { id, title: 'Welcome', msgs: [{ role: 'assistant', content: welcome }], ts: Date.now() };
+    setChats([chat]);
+    setActiveCid(id);
+    setScreen('chat');
   };
 
   // From home: Log In button
   const handleGoLogin = () => setScreen('login');
 
-  // After login
+  // After login — go straight to chat
   const handleAuth = (u) => {
     setUser(u);
-    setScreen('grade');
+    const welcome = "Hey there! 👋 I'm **ApexHighAI** — your personal high school AI. You can chat, drop files, take photos, upload videos, write code, or manage projects. *I respond in any language!*";
+    const id = uid();
+    const chat = { id, title: 'Welcome', msgs: [{ role: 'assistant', content: welcome }], ts: Date.now() };
+    setChats([chat]);
+    setActiveCid(id);
+    setScreen('chat');
   };
 
   // After grade selector
@@ -866,6 +886,7 @@ export default function ApexHighAI() {
         --sb-w:268px;
       }
       body{background:var(--nv);font-family:'DM Sans',sans-serif;color:var(--wh);min-height:100vh;overflow:hidden;}
+      body.scrollable{overflow:auto;}
 
       /* ── HOME PAGE ── */
       .home-page{min-height:100vh;display:flex;flex-direction:column;position:relative;overflow:hidden;}

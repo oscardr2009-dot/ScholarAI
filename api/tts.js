@@ -1,10 +1,11 @@
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
-  const { text, voiceId = '21m00Tcm4TlvDq8ikWAM' } = req.body;
-  if (!text) return res.status(400).json({ error: 'No text provided' });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
   try {
+    const { text, voiceId = '21m00Tcm4TlvDq8ikWAM' } = req.body;
+
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: {
@@ -26,7 +27,7 @@ export default async function handler(req, res) {
     const audioBuffer = await response.arrayBuffer();
     res.setHeader('Content-Type', 'audio/mpeg');
     res.send(Buffer.from(audioBuffer));
-  } catch (e) {
-    res.status(500).json({ error: e.message });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 }

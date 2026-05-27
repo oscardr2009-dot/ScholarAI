@@ -60,6 +60,60 @@ Knowledge: SAT (400-1600), ACT (1-36), PSAT, AP Exams, IB, CLEP, study methods, 
 
 Tone: Warm, motivating, clear, student-friendly. Use structure, bullet points, and headers. Always encourage.`;
 
+// ─── ElevenLabs TTS ──────────────────────────────────────────────────────────
+const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY;
+const ELEVENLABS_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'; // Rachel — clear, friendly
+
+async function speakText(text, onStart, onEnd, onError) {
+  if (!ELEVENLABS_API_KEY) { onError('No ElevenLabs API key found.'); return; }
+  const clean = text
+    .replace(/<[^>]+>/g, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/#{1,4}\s/g, '')
+    .replace(/```[\s\S]*?```/g, '[code block]')
+    .replace(/`([^`]+)`/g, '$1')
+    .slice(0, 4000);
+  try {
+    onStart();
+    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
+      method: 'POST',
+      headers: { 'xi-api-key': ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: clean,
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      }),
+    });
+    if (!res.ok) throw new Error(`ElevenLabs error: ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.onended = () => { URL.revokeObjectURL(url); onEnd(); };
+    audio.onerror = () => { URL.revokeObjectURL(url); onError('Audio playback failed.'); };
+    audio.play();
+    return audio;
+  } catch (e) { onError(e.message); }
+}
+
+// ─── ElevenLabs STT ──────────────────────────────────────────────────────────
+async function transcribeAudio(audioBlob, onResult, onError) {
+  if (!ELEVENLABS_API_KEY) { onError('No ElevenLabs API key found.'); return; }
+  try {
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'recording.webm');
+    formData.append('model_id', 'scribe_v1');
+    const res = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+      method: 'POST',
+      headers: { 'xi-api-key': ELEVENLABS_API_KEY },
+      body: formData,
+    });
+    if (!res.ok) throw new Error(`STT error: ${res.status}`);
+    const data = await res.json();
+    onResult(data.text || '');
+  } catch (e) { onError(e.message); }
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function fmt(text) {
   if (!text) return '';
@@ -143,6 +197,42 @@ function AttachPrev({ atts, onRm }) {
   );
 }
 
+// ─── TTS Button ───────────────────────────────────────────────────────────────
+function TTSButton({ text }) {
+  const [state, setState] = useState('idle');
+  const audioRef = useRef(null);
+
+  const handleClick = async () => {
+    if (state === 'playing') {
+      audioRef.current?.pause();
+      audioRef.current = null;
+      setState('idle');
+      return;
+    }
+    if (state === 'loading') return;
+    const audio = await speakText(
+      text,
+      () => setState('loading'),
+      () => setState('idle'),
+      () => setState('error'),
+    );
+    if (audio) { audioRef.current = audio; setState('playing'); }
+  };
+
+  useEffect(() => () => { audioRef.current?.pause(); }, []);
+
+  return (
+    <button
+      className={`tts-btn${state === 'playing' ? ' tts-playing' : ''}${state === 'loading' ? ' tts-loading' : ''}${state === 'error' ? ' tts-error' : ''}`}
+      onClick={handleClick}
+      title={state === 'playing' ? 'Stop audio' : state === 'loading' ? 'Loading…' : 'Listen to this response'}
+    >
+      {state === 'loading' ? '⏳' : state === 'playing' ? '⏹' : state === 'error' ? '⚠️' : '🔊'}
+    </button>
+  );
+}
+
+// ─── MsgBubble ────────────────────────────────────────────────────────────────
 function MsgBubble({ msg }) {
   const isU = msg.role === 'user';
   return (
@@ -162,6 +252,11 @@ function MsgBubble({ msg }) {
         {msg.pdfs?.length > 0 && <div className="mfile-row">{msg.pdfs.map((p, i) => <div key={i} className="mfile">📄 {p}</div>)}</div>}
         {msg.files?.length > 0 && <div className="mfile-row">{msg.files.map((f, i) => <div key={i} className="mfile">📎 {f}</div>)}</div>}
         {msg.content && <div className="bcon" dangerouslySetInnerHTML={{ __html: fmt(msg.content) }} />}
+        {!isU && msg.content && (
+          <div className="tts-row">
+            <TTSButton text={msg.content} />
+          </div>
+        )}
       </div>
       {isU && <div className="av uav">✦</div>}
     </div>
@@ -204,7 +299,6 @@ function AboutUs({ onBack }) {
             starting to learn to code — we've got you, in any language, at any level.
           </p>
         </div>
-
         <div className="ab-mission">
           <h2 className="ab-section-h">Our Mission</h2>
           <p className="ab-section-p">
@@ -218,7 +312,6 @@ function AboutUs({ onBack }) {
             ApexHighAI doesn't just answer your questions — it teaches you how to think, plan, and succeed.
           </p>
         </div>
-
         <div className="ab-features-section">
           <h2 className="ab-section-h">Everything You Need</h2>
           <div className="ab-grid">
@@ -233,7 +326,6 @@ function AboutUs({ onBack }) {
             ))}
           </div>
         </div>
-
         <div className="ab-who">
           <h2 className="ab-section-h">Who It's For</h2>
           <div className="ab-who-grid">
@@ -251,13 +343,11 @@ function AboutUs({ onBack }) {
             ))}
           </div>
         </div>
-
         <div className="ab-cta">
           <h2 className="ab-cta-h">Ready to reach your apex?</h2>
           <p className="ab-cta-sub">Join thousands of students already using ApexHighAI to study smarter, score higher, and plan their futures.</p>
           <button className="ab-cta-btn" onClick={onBack}>Get Started →</button>
         </div>
-
         <div className="ab-trust">
           <span>🔒 Private</span><span className="td" />
           <span>📷 Photos</span><span className="td" />
@@ -272,33 +362,21 @@ function AboutUs({ onBack }) {
   );
 }
 
-// ─── HOME PAGE (was Landing) ──────────────────────────────────────────────────
-// This is now the FIRST page visitors see — the main welcome screen.
-// It shows: Welcome text, quick topics, a Log In button (top right),
-// a "Choose Your Grade" button (top center), and an "About Us" link.
+// ─── HOME PAGE ────────────────────────────────────────────────────────────────
 function HomePage({ onGoGrade, onGoLogin, onGoAbout, onGoChat }) {
   const [showLangM, setShowLangM] = useState(false);
   const [lang, setLang] = useState('auto');
-
   return (
     <div className="home-page">
       <div className="hp-orb1" /><div className="hp-orb2" /><div className="hp-orb3" />
-
-      {/* Top bar */}
       <div className="hp-topbar">
         <div className="hp-logo">
           <div className="hp-logo-ic">🎓</div>
           <span className="hp-logo-tx">ApexHighAI</span>
         </div>
-
-        {/* Center: Grade selector button */}
         <div className="hp-top-center">
-          <button className="hp-grade-btn" onClick={onGoGrade}>
-            📚 Choose Your Grade
-          </button>
+          <button className="hp-grade-btn" onClick={onGoGrade}>📚 Choose Your Grade</button>
         </div>
-
-        {/* Right: Language + Login */}
         <div className="hp-top-right">
           <div style={{ position: 'relative' }}>
             <button className="hp-lang-btn" onClick={() => setShowLangM(v => !v)}>
@@ -308,9 +386,7 @@ function HomePage({ onGoGrade, onGoLogin, onGoAbout, onGoChat }) {
               <div className="hp-lang-dd">
                 {LANGUAGES.map(l => (
                   <div key={l.code} className={`lopt${lang === l.code ? ' act' : ''}`}
-                    onClick={() => { setLang(l.code); setShowLangM(false); }}>
-                    {l.label}
-                  </div>
+                    onClick={() => { setLang(l.code); setShowLangM(false); }}>{l.label}</div>
                 ))}
               </div>
             )}
@@ -318,8 +394,6 @@ function HomePage({ onGoGrade, onGoLogin, onGoAbout, onGoChat }) {
           <button className="hp-login-btn" onClick={onGoLogin}>Log In</button>
         </div>
       </div>
-
-      {/* Hero */}
       <div className="hp-hero">
         <div className="hp-badge">High School AI · US Edition</div>
         <h1 className="hp-h1">Welcome</h1>
@@ -330,8 +404,6 @@ function HomePage({ onGoGrade, onGoLogin, onGoAbout, onGoChat }) {
         </p>
         <button className="hp-about-btn" onClick={onGoAbout}>About Us</button>
       </div>
-
-      {/* Quick topics */}
       <div className="hp-topics-wrap">
         <div className="hp-topics-lbl">Quick Topics</div>
         <div className="hp-topics-row">
@@ -342,8 +414,6 @@ function HomePage({ onGoGrade, onGoLogin, onGoAbout, onGoChat }) {
           ))}
         </div>
       </div>
-
-      {/* Ask anything bar (visual, prompts login/grade first) */}
       <div className="hp-input-area">
         <div className="hp-iinner" onClick={onGoChat.bind(null, null)}>
           <span className="hp-input-placeholder">Ask anything… or drop a file, photo, PDF, or video</span>
@@ -400,7 +470,6 @@ function LoginPage({ onContinue, onBack }) {
           <span className="land-title">ApexHighAI</span>
         </div>
         <div className="land-badge">High School AI · US Edition</div>
-
         {mode === 'home' && (
           <>
             <h1 className="land-h">Sign in to your account</h1>
@@ -421,7 +490,6 @@ function LoginPage({ onContinue, onBack }) {
             <p className="guest-note">No account needed · Guest sessions are temporary</p>
           </>
         )}
-
         {(mode === 'signin' || mode === 'signup') && (
           <>
             <button className="back-btn" onClick={() => { setMode('home'); setErr(''); }}>← Back</button>
@@ -443,7 +511,6 @@ function LoginPage({ onContinue, onBack }) {
             </p>
           </>
         )}
-
         <div className="land-trust">
           <span>🔒 Private</span><span className="td" />
           <span>📷 Photos</span><span className="td" />
@@ -457,7 +524,7 @@ function LoginPage({ onContinue, onBack }) {
   );
 }
 
-// ─── GRADE SELECTOR (was Onboarding) ─────────────────────────────────────────
+// ─── GRADE SELECTOR ───────────────────────────────────────────────────────────
 function GradeSelector({ user, onStart, onBack }) {
   const [grade, setGrade] = useState('');
   const [gradeErr, setGradeErr] = useState(false);
@@ -487,9 +554,7 @@ function GradeSelector({ user, onStart, onBack }) {
         <div className="gg">
           {GRADE_OPTIONS.slice(0, 4).map(o => (
             <button key={o.value} className={`gbtn${grade === o.value ? ' sel' : ''}`}
-              onClick={() => { setGrade(o.value); setGradeErr(false); }}>
-              {o.label}
-            </button>
+              onClick={() => { setGrade(o.value); setGradeErr(false); }}>{o.label}</button>
           ))}
           <button className={`gbtn prefer${grade === 'prefer_not' ? ' sel' : ''}`}
             onClick={() => { setGrade('prefer_not'); setGradeErr(false); }}>
@@ -507,9 +572,7 @@ function GradeSelector({ user, onStart, onBack }) {
             <div className="ldrop">
               {LANGUAGES.map(l => (
                 <div key={l.code} className={`lopt${lang === l.code ? ' act' : ''}`}
-                  onClick={() => { setLang(l.code); setShowL(false); }}>
-                  {l.label}
-                </div>
+                  onClick={() => { setLang(l.code); setShowL(false); }}>{l.label}</div>
               ))}
             </div>
           )}
@@ -605,10 +668,8 @@ function ProjectPanel({ projects, onNew, onSelect, onDelete, selectedId, onClose
     </div>
   );
 }
-
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function ApexHighAI() {
-  // screen: 'home' | 'login' | 'grade' | 'about' | 'chat'
   const [screen, setScreen] = useState('home');
   const [user, setUser] = useState(null);
   const [grade, setGrade] = useState('');
@@ -631,8 +692,9 @@ export default function ApexHighAI() {
   const [showCode, setShowCode] = useState(false);
   const [showProj, setShowProj] = useState(false);
   const [showLangM, setShowLangM] = useState(false);
-  // Stores a prompt to auto-send when entering the chat after clicking a quick topic from home
   const [pendingPrompt, setPendingPrompt] = useState(null);
+  const [isStt, setIsStt] = useState(false);
+  const [sttStatus, setSttStatus] = useState('');
 
   const chatEnd = useRef(null);
   const inputRef = useRef(null);
@@ -644,6 +706,8 @@ export default function ApexHighAI() {
   const recRef = useRef(null);
   const recTimer = useRef(null);
   const recChunk = useRef([]);
+  const sttRecRef = useRef(null);
+  const sttChunkRef = useRef([]);
 
   const activeChat = chats.find(c => c.id === activeCid) || null;
   const msgs = activeChat?.msgs || [];
@@ -725,6 +789,33 @@ export default function ApexHighAI() {
     } catch { alert('Mic access denied.'); }
   };
   const stopRec = () => { recRef.current?.stop(); clearInterval(recTimer.current); setIsRec(false); setRecSec(0); };
+
+  const startStt = async () => {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+      sttChunkRef.current = [];
+      const mr = new MediaRecorder(s, { mimeType: 'audio/webm' });
+      mr.ondataavailable = e => sttChunkRef.current.push(e.data);
+      mr.onstop = async () => {
+        s.getTracks().forEach(t => t.stop());
+        setSttStatus('transcribing');
+        const blob = new Blob(sttChunkRef.current, { type: 'audio/webm' });
+        await transcribeAudio(
+          blob,
+          (text) => {
+            if (text) setInput(prev => prev ? prev + ' ' + text : text);
+            setSttStatus(''); setIsStt(false);
+            setTimeout(() => inputRef.current?.focus(), 100);
+          },
+          (err) => { console.error('STT error:', err); setSttStatus(''); setIsStt(false); }
+        );
+      };
+      mr.start();
+      sttRecRef.current = mr;
+      setIsStt(true); setSttStatus('recording');
+    } catch { alert('Mic access denied.'); }
+  };
+  const stopStt = () => { sttRecRef.current?.stop(); setIsStt(false); };
 
   const sendVoice = async () => {
     const cid = activeCid || newChat(activeProj);
@@ -814,44 +905,24 @@ export default function ApexHighAI() {
     if (pChat) setActiveCid(pChat.id); else newChat(id);
   };
 
-  // ── Flow handlers ──
   const handleHomeQuickTopic = (prompt) => {
     const welcome = "Hey there! 👋 I'm **ApexHighAI** — your personal high school AI. You can chat, drop files, take photos, upload videos, write code, or manage projects. *I respond in any language!*";
     const id = uid();
     const chat = { id, title: prompt ? 'New Chat' : 'Welcome', msgs: [{ role: 'assistant', content: welcome }], ts: Date.now() };
-    setChats([chat]);
-    setActiveCid(id);
-    setScreen('chat');
-    if (prompt) {
-      setTimeout(() => sendWithId(id, [{ role: 'assistant', content: welcome }], prompt), 200);
-    }
+    setChats([chat]); setActiveCid(id); setScreen('chat');
+    if (prompt) { setTimeout(() => sendWithId(id, [{ role: 'assistant', content: welcome }], prompt), 200); }
   };
 
-  // From home: clicking the input bar goes straight to chat
-  const handleHomeInputClick = () => {
-    const welcome = "Hey there! 👋 I'm **ApexHighAI** — your personal high school AI. You can chat, drop files, take photos, upload videos, write code, or manage projects. *I respond in any language!*";
-    const id = uid();
-    const chat = { id, title: 'Welcome', msgs: [{ role: 'assistant', content: welcome }], ts: Date.now() };
-    setChats([chat]);
-    setActiveCid(id);
-    setScreen('chat');
-  };
-
-  // From home: Log In button
   const handleGoLogin = () => setScreen('login');
 
-  // After login — go straight to chat
   const handleAuth = (u) => {
     setUser(u);
     const welcome = "Hey there! 👋 I'm **ApexHighAI** — your personal high school AI. You can chat, drop files, take photos, upload videos, write code, or manage projects. *I respond in any language!*";
     const id = uid();
     const chat = { id, title: 'Welcome', msgs: [{ role: 'assistant', content: welcome }], ts: Date.now() };
-    setChats([chat]);
-    setActiveCid(id);
-    setScreen('chat');
+    setChats([chat]); setActiveCid(id); setScreen('chat');
   };
 
-  // After grade selector
   const handleGradeStart = ({ grade: g, lang: l }) => {
     setGrade(g); setLang(l);
     const gl = GRADE_OPTIONS.find(o => o.value === g)?.label || '';
@@ -861,7 +932,6 @@ export default function ApexHighAI() {
     const id = uid();
     const chat = { id, title: 'Welcome', msgs: [{ role: 'assistant', content: welcome }], ts: Date.now() };
     setChats([chat]); setActiveCid(id); setScreen('chat');
-    // If a quick topic was pending, fire it
     if (pendingPrompt) {
       setTimeout(() => sendWithId(id, [{ role: 'assistant', content: welcome }], pendingPrompt), 150);
       setPendingPrompt(null);
@@ -887,15 +957,11 @@ export default function ApexHighAI() {
       }
       body{background:var(--nv);font-family:'DM Sans',sans-serif;color:var(--wh);min-height:100vh;overflow:hidden;}
       body.scrollable{overflow:auto;}
-
-      /* ── HOME PAGE ── */
       .home-page{min-height:100vh;display:flex;flex-direction:column;position:relative;overflow:hidden;}
       .hp-orb1,.hp-orb2,.hp-orb3{position:absolute;border-radius:50%;filter:blur(90px);pointer-events:none;opacity:.13;}
       .hp-orb1{width:500px;height:500px;background:var(--tl);top:-140px;right:-80px;}
       .hp-orb2{width:400px;height:400px;background:var(--gd);bottom:-100px;left:-60px;}
       .hp-orb3{width:220px;height:220px;background:#818cf8;top:40%;left:32%;}
-
-      /* Top bar */
       .hp-topbar{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.5rem;border-bottom:1px solid var(--border);background:rgba(11,21,38,.97);backdrop-filter:blur(12px);position:relative;z-index:10;flex-shrink:0;}
       .hp-logo{display:flex;align-items:center;gap:.55rem;}
       .hp-logo-ic{width:34px;height:34px;background:linear-gradient(135deg,var(--gd),var(--tl));border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.95rem;}
@@ -909,8 +975,6 @@ export default function ApexHighAI() {
       .hp-lang-dd{position:absolute;top:calc(100% + .4rem);right:0;background:var(--nv2);border:1px solid var(--border2);border-radius:12px;z-index:100;width:170px;max-height:200px;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,.5);}
       .hp-login-btn{background:transparent;border:1.5px solid rgba(245,200,66,.35);color:var(--gd);border-radius:100px;font-family:'Syne',sans-serif;font-weight:700;font-size:.8rem;padding:.38rem .95rem;cursor:pointer;transition:all .18s;}
       .hp-login-btn:hover{background:var(--gd3);border-color:var(--gd);}
-
-      /* Hero */
       .hp-hero{display:flex;flex-direction:column;align-items:center;text-align:center;padding:2.5rem 1.5rem 1.2rem;position:relative;z-index:1;}
       .hp-badge{display:inline-block;background:rgba(245,200,66,.1);color:var(--gd);font-size:.62rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:.2rem .6rem;border-radius:100px;border:1px solid rgba(245,200,66,.2);margin-bottom:.8rem;}
       .hp-h1{font-family:'Syne',sans-serif;font-weight:800;font-size:2.6rem;letter-spacing:-.02em;background:linear-gradient(90deg,var(--wh),var(--wh2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:.6rem;}
@@ -919,27 +983,19 @@ export default function ApexHighAI() {
       .hp-sub em{color:var(--tl);}
       .hp-about-btn{background:transparent;border:none;color:var(--mu);font-family:'DM Sans',sans-serif;font-size:.78rem;cursor:pointer;text-decoration:underline;text-underline-offset:3px;transition:color .15s;margin-top:.1rem;}
       .hp-about-btn:hover{color:var(--wh2);}
-
-      /* Quick topics */
       .hp-topics-wrap{padding:.2rem 1.5rem .6rem;position:relative;z-index:1;flex-shrink:0;}
       .hp-topics-lbl{font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mu);margin-bottom:.5rem;text-align:center;}
       .hp-topics-row{display:flex;gap:.4rem;overflow-x:auto;padding-bottom:.3rem;justify-content:center;flex-wrap:wrap;scrollbar-width:none;}
       .hp-topics-row::-webkit-scrollbar{display:none;}
       .hp-topic-chip{display:flex;align-items:center;gap:.3rem;white-space:nowrap;background:var(--nv3);border:1px solid var(--border);color:var(--wh2);border-radius:100px;padding:.38rem .78rem;font-size:.76rem;font-weight:500;cursor:pointer;transition:all .15s;flex-shrink:0;}
       .hp-topic-chip:hover{border-color:var(--gd);color:var(--gd);background:rgba(245,200,66,.07);}
-
-      /* Input bar */
       .hp-input-area{padding:.55rem 1.5rem .85rem;border-top:1px solid var(--border);background:rgba(11,21,38,.98);flex-shrink:0;position:relative;z-index:1;margin-top:auto;}
       .hp-iinner{display:flex;align-items:center;gap:.5rem;background:var(--nv2);border:1.5px solid var(--border);border-radius:15px;padding:.62rem .62rem .62rem .92rem;cursor:pointer;max-width:760px;margin:0 auto;transition:border-color .2s;}
       .hp-iinner:hover{border-color:rgba(245,200,66,.25);}
       .hp-input-placeholder{flex:1;color:var(--mu);font-size:.92rem;}
       .hp-send-btn{width:36px;height:36px;background:linear-gradient(135deg,var(--gd),var(--gd2));border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--nv);font-weight:700;font-size:1rem;}
       .hp-disc{text-align:center;color:var(--mu);font-size:.64rem;margin-top:.45rem;opacity:.55;max-width:760px;margin-left:auto;margin-right:auto;}
-
-      /* ── LOGIN PAGE ── */
       .login-page{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem 1.2rem;position:relative;overflow:hidden;}
-
-      /* ── ABOUT US PAGE ── */
       .about-page{min-height:100vh;overflow-y:auto;position:relative;padding:0 0 4rem;}
       .ab-orb1,.ab-orb2,.ab-orb3{position:fixed;border-radius:50%;filter:blur(100px);pointer-events:none;opacity:.1;z-index:0;}
       .ab-orb1{width:500px;height:500px;background:var(--tl);top:-100px;right:-100px;}
@@ -979,8 +1035,6 @@ export default function ApexHighAI() {
       .ab-cta-btn{background:linear-gradient(135deg,var(--gd),var(--gd2));color:var(--nv);border:none;border-radius:13px;font-family:'Syne',sans-serif;font-weight:700;font-size:.97rem;padding:.88rem 2.2rem;cursor:pointer;transition:all .2s;box-shadow:0 4px 20px rgba(245,200,66,.3);}
       .ab-cta-btn:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(245,200,66,.4);}
       .ab-trust{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:.45rem .75rem;color:var(--mu);font-size:.7rem;}
-
-      /* ── SHARED AUTH CARD ── */
       .lo1,.lo2,.lo3{position:absolute;border-radius:50%;filter:blur(90px);pointer-events:none;opacity:.14;}
       .lo1{width:500px;height:500px;background:var(--tl);top:-140px;right:-80px;}
       .lo2{width:400px;height:400px;background:var(--gd);bottom:-100px;left:-60px;}
@@ -1020,8 +1074,6 @@ export default function ApexHighAI() {
       .auth-switch span{color:var(--tl);cursor:pointer;text-decoration:underline;}
       .land-trust{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:.45rem .75rem;margin-top:1.2rem;color:var(--mu);font-size:.7rem;}
       .td{width:3px;height:3px;background:var(--mu);border-radius:50%;opacity:.35;}
-
-      /* ── GRADE SELECTOR (ONBOARDING) ── */
       .onboarding{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem 1.5rem;position:relative;overflow:hidden;}
       .bo1,.bo2,.bo3{position:absolute;border-radius:50%;filter:blur(90px);pointer-events:none;opacity:.15;}
       .bo1{width:500px;height:500px;background:var(--tl);top:-150px;right:-100px;}
@@ -1053,8 +1105,6 @@ export default function ApexHighAI() {
       .s-btn{width:100%;background:linear-gradient(135deg,var(--gd),var(--gd2));color:var(--nv);border:none;border-radius:13px;font-family:'Syne',sans-serif;font-weight:700;font-size:.97rem;padding:.9rem;cursor:pointer;transition:all .2s;box-shadow:0 4px 20px rgba(245,200,66,.3);}
       .s-btn:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(245,200,66,.4);}
       .t-strip{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:.45rem .75rem;margin-top:1.2rem;color:var(--mu);font-size:.7rem;}
-
-      /* ── CHAT APP SHELL ── */
       .app-shell{display:flex;height:100vh;overflow:hidden;background:var(--nv);}
       .sidebar{width:var(--sb-w);flex-shrink:0;background:var(--nv2);border-right:1px solid var(--border);display:flex;flex-direction:column;transition:transform .25s ease,width .25s ease;overflow:hidden;}
       .sidebar.closed{width:0;transform:translateX(-100%);}
@@ -1127,7 +1177,7 @@ export default function ApexHighAI() {
       .av{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0;margin-top:.08rem;}
       .aav{background:linear-gradient(135deg,var(--gd),var(--tl));color:var(--nv);font-family:'Syne',sans-serif;}
       .uav{background:rgba(255,255,255,.08);color:var(--gd);border:1px solid var(--border);}
-      .bub{max-width:min(76%,620px);border-radius:18px;padding:.9rem 1.1rem;font-size:.92rem;line-height:1.68;}
+      .bub{max-width:min(76%,620px);border-radius:18px;padding:.9rem 1.1rem;font-size:.92rem;line-height:1.68;position:relative;}
       .abub{background:var(--bai);color:var(--wh);border-bottom-left-radius:5px;border:1px solid rgba(255,255,255,.05);}
       .ubub{background:var(--gd);color:#0b1526;border-bottom-right-radius:5px;font-weight:500;}
       .bcon h2,.bcon h3,.bcon h4{font-family:'Syne',sans-serif;font-weight:700;margin:.85rem 0 .32rem;color:var(--tl);}
@@ -1201,6 +1251,17 @@ export default function ApexHighAI() {
       .sbtn:hover:not(:disabled){transform:scale(1.08);box-shadow:0 4px 14px rgba(245,200,66,.36);}
       .sbtn:disabled{opacity:.36;cursor:not-allowed;}
       .disc{text-align:center;color:var(--mu);font-size:.66rem;margin-top:.4rem;opacity:.58;}
+      .tts-row{display:flex;justify-content:flex-end;margin-top:.55rem;padding-top:.38rem;border-top:1px solid rgba(255,255,255,.05);}
+      .tts-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:var(--mu);border-radius:8px;padding:.28rem .55rem;font-size:.8rem;cursor:pointer;transition:all .18s;display:flex;align-items:center;gap:.3rem;line-height:1;}
+      .tts-btn:hover{background:rgba(45,212,191,.12);border-color:rgba(45,212,191,.3);color:var(--tl);}
+      .tts-btn.tts-playing{background:rgba(45,212,191,.15);border-color:rgba(45,212,191,.4);color:var(--tl);animation:tts-pulse 1.5s ease-in-out infinite;}
+      .tts-btn.tts-loading{opacity:.6;cursor:not-allowed;}
+      .tts-btn.tts-error{border-color:rgba(248,113,113,.3);color:var(--red);}
+      @keyframes tts-pulse{0%,100%{box-shadow:0 0 0 0 rgba(45,212,191,.25)}50%{box-shadow:0 0 0 5px rgba(45,212,191,0)}}
+      .stt-btn{width:36px;height:36px;background:var(--nv3);border:1.5px solid var(--border);border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .17s;font-size:.95rem;color:var(--mu);}
+      .stt-btn:hover{border-color:rgba(45,212,191,.4);color:var(--tl);}
+      .stt-btn.stt-active{border-color:var(--red);color:var(--red);background:rgba(248,113,113,.1);animation:pulse 1s infinite;}
+      .stt-btn.stt-transcribing{border-color:var(--gd);color:var(--gd);opacity:.7;cursor:not-allowed;}
       .cp-overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:300;display:flex;align-items:center;justify-content:center;padding:1rem;}
       .cp-modal{background:var(--nv2);border:1px solid var(--border2);border-radius:22px;width:100%;max-width:520px;overflow:hidden;animation:cardIn .3s ease both;}
       .cp-hdr{display:flex;align-items:center;justify-content:space-between;padding:1.1rem 1.3rem;border-bottom:1px solid var(--border);}
@@ -1279,9 +1340,7 @@ export default function ApexHighAI() {
       }
       `}</style>
 
-      {isDrag && (
-        <div className="drag-ov"><div className="drag-msg">📂 Drop files, PDFs, photos or videos</div></div>
-      )}
+      {isDrag && <div className="drag-ov"><div className="drag-msg">📂 Drop files, PDFs, photos or videos</div></div>}
 
       {showCam && (
         <div className="modal">
@@ -1312,31 +1371,13 @@ export default function ApexHighAI() {
         </div>
       )}
 
-      {/* ── SCREEN ROUTING ── */}
-      {screen === 'home' && (
-        <HomePage
-          onGoGrade={() => setScreen('grade')}
-          onGoLogin={handleGoLogin}
-          onGoAbout={() => setScreen('about')}
-          onGoChat={handleHomeQuickTopic}
-        />
-      )}
-
+      {screen === 'home' && <HomePage onGoGrade={() => setScreen('grade')} onGoLogin={handleGoLogin} onGoAbout={() => setScreen('about')} onGoChat={handleHomeQuickTopic} />}
       {screen === 'about' && <AboutUs onBack={() => setScreen('home')} />}
-
-      {screen === 'login' && (
-        <LoginPage onContinue={handleAuth} onBack={() => setScreen('home')} />
-      )}
-
-      {screen === 'grade' && (
-        <GradeSelector user={user} onStart={handleGradeStart} onBack={() => setScreen(user ? 'login' : 'home')} />
-      )}
+      {screen === 'login' && <LoginPage onContinue={handleAuth} onBack={() => setScreen('home')} />}
+      {screen === 'grade' && <GradeSelector user={user} onStart={handleGradeStart} onBack={() => setScreen(user ? 'login' : 'home')} />}
 
       {screen === 'chat' && (
-        <div className="app-shell"
-          onDragOver={e => { e.preventDefault(); setIsDrag(true); }}
-          onDragLeave={() => setIsDrag(false)}
-          onDrop={onDrop}>
+        <div className="app-shell" onDragOver={e => { e.preventDefault(); setIsDrag(true); }} onDragLeave={() => setIsDrag(false)} onDrop={onDrop}>
           <div className={`sidebar${sideOpen ? '' : ' closed'}`}>
             <div className="sb-top">
               <div className="sb-logo">
@@ -1352,22 +1393,13 @@ export default function ApexHighAI() {
             {activeProj && (
               <div className="sb-section">
                 <div className="sb-section-lbl">Active Project</div>
-                <div className="sb-proj-pill active">
-                  <span className="pico">📁</span>
-                  <span>{projects.find(p => p.id === activeProj)?.name || 'Project'}</span>
-                </div>
-                <div className="sb-proj-pill" onClick={() => setActiveProj(null)}>
-                  <span className="pico">💬</span><span>All Chats</span>
-                </div>
+                <div className="sb-proj-pill active"><span className="pico">📁</span><span>{projects.find(p => p.id === activeProj)?.name || 'Project'}</span></div>
+                <div className="sb-proj-pill" onClick={() => setActiveProj(null)}><span className="pico">💬</span><span>All Chats</span></div>
               </div>
             )}
-            <div className="sb-section">
-              <div className="sb-section-lbl">{activeProj ? 'Project Chats' : 'Recent Chats'}</div>
-            </div>
+            <div className="sb-section"><div className="sb-section-lbl">{activeProj ? 'Project Chats' : 'Recent Chats'}</div></div>
             <div className="sb-chats">
-              {sideChats.length === 0 && (
-                <p style={{ color: 'var(--mu2)', fontSize: '.78rem', padding: '.3rem .7rem' }}>No chats yet</p>
-              )}
+              {sideChats.length === 0 && <p style={{ color: 'var(--mu2)', fontSize: '.78rem', padding: '.3rem .7rem' }}>No chats yet</p>}
               {sideChats.map(c => (
                 <div key={c.id} className={`sb-chat-item${c.id === activeCid ? ' active' : ''}`} onClick={() => setActiveCid(c.id)}>
                   <span className="sb-chat-ico">💬</span>
@@ -1380,18 +1412,12 @@ export default function ApexHighAI() {
               <div className="sb-aitools-lbl">🛠 AI Tools</div>
               <a className="sb-aitool det" href="https://gptzero.me" target="_blank" rel="noopener noreferrer">
                 <span className="sb-aitool-ico">🔍</span>
-                <div className="sb-aitool-info">
-                  <span className="sb-aitool-name">GPTZero</span>
-                  <span className="sb-aitool-desc">Best AI Detector</span>
-                </div>
+                <div className="sb-aitool-info"><span className="sb-aitool-name">GPTZero</span><span className="sb-aitool-desc">Best AI Detector</span></div>
                 <span className="sb-aitool-stars">★★★★★</span>
               </a>
               <a className="sb-aitool hum" href="https://undetectable.ai" target="_blank" rel="noopener noreferrer">
                 <span className="sb-aitool-ico">✍️</span>
-                <div className="sb-aitool-info">
-                  <span className="sb-aitool-name">Undetectable.ai</span>
-                  <span className="sb-aitool-desc">Best AI Humanizer</span>
-                </div>
+                <div className="sb-aitool-info"><span className="sb-aitool-name">Undetectable.ai</span><span className="sb-aitool-desc">Best AI Humanizer</span></div>
                 <span className="sb-aitool-stars">★★★★★</span>
               </a>
             </div>
@@ -1412,12 +1438,8 @@ export default function ApexHighAI() {
               <button className="tb-toggle" onClick={() => setSideOpen(v => !v)}>☰</button>
               <span className="tb-title">{activeChat?.title || 'ApexHighAI'}</span>
               <div className="tb-right">
-                {grade && grade !== 'prefer_not' && (
-                  <span className="tb-badge tb-grade">{GRADE_OPTIONS.find(o => o.value === grade)?.label}</span>
-                )}
-                {activeProj && (
-                  <span className="tb-badge tb-proj">📁 {projects.find(p => p.id === activeProj)?.name}</span>
-                )}
+                {grade && grade !== 'prefer_not' && <span className="tb-badge tb-grade">{GRADE_OPTIONS.find(o => o.value === grade)?.label}</span>}
+                {activeProj && <span className="tb-badge tb-proj">📁 {projects.find(p => p.id === activeProj)?.name}</span>}
                 <div style={{ position: 'relative' }}>
                   <span className="tb-badge tb-lang" onClick={() => setShowLangM(v => !v)}>
                     🌐 {LANGUAGES.find(l => l.code === lang)?.label}
@@ -1426,9 +1448,7 @@ export default function ApexHighAI() {
                     <div className="lang-dd">
                       {LANGUAGES.map(l => (
                         <div key={l.code} className={`lopt${lang === l.code ? ' act' : ''}`}
-                          onClick={() => { setLang(l.code); setShowLangM(false); }}>
-                          {l.label}
-                        </div>
+                          onClick={() => { setLang(l.code); setShowLangM(false); }}>{l.label}</div>
                       ))}
                     </div>
                   )}
@@ -1445,9 +1465,7 @@ export default function ApexHighAI() {
                     <p className="es-sub">Ask me anything about high school — SAT prep, homework, essays, coding, college planning, or start a new project.</p>
                     <div className="qt-row">
                       {QUICK_TOPICS.map(t => (
-                        <button key={t.label} className="qt-chip" onClick={() => send(t.prompt)}>
-                          <span>{t.icon}</span>{t.label}
-                        </button>
+                        <button key={t.label} className="qt-chip" onClick={() => send(t.prompt)}><span>{t.icon}</span>{t.label}</button>
                       ))}
                     </div>
                   </div>
@@ -1458,14 +1476,10 @@ export default function ApexHighAI() {
                 <div className="msgs-inner">
                   {msgs.length <= 1 && (
                     <div style={{ marginBottom: '1rem' }}>
-                      <div className="qt-lbl" style={{ marginBottom: '.5rem', fontSize: '.68rem', fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--mu2)' }}>
-                        Quick Topics
-                      </div>
+                      <div className="qt-lbl" style={{ marginBottom: '.5rem', fontSize: '.68rem', fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--mu2)' }}>Quick Topics</div>
                       <div className="qt-scrl">
                         {QUICK_TOPICS.map(t => (
-                          <button key={t.label} className="qt-chip" onClick={() => send(t.prompt)}>
-                            <span>{t.icon}</span>{t.label}
-                          </button>
+                          <button key={t.label} className="qt-chip" onClick={() => send(t.prompt)}><span>{t.icon}</span>{t.label}</button>
                         ))}
                       </div>
                     </div>
@@ -1510,9 +1524,17 @@ export default function ApexHighAI() {
                 </div>
                 <div className="iinner">
                   <textarea ref={inputRef} className="minput" rows={1}
-                    placeholder="Ask anything… or drop a file, photo, PDF, or video"
+                    placeholder={isStt && sttStatus === 'recording' ? '🎤 Listening… click mic to stop' : isStt && sttStatus === 'transcribing' ? '⏳ Transcribing…' : 'Ask anything… or drop a file, photo, PDF, or video'}
                     value={input} onChange={e => setInput(e.target.value)} onKeyDown={onKey}
                     onInput={e => { e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 115) + 'px'; }} />
+                  <button
+                    className={`stt-btn${isStt && sttStatus === 'recording' ? ' stt-active' : ''}${isStt && sttStatus === 'transcribing' ? ' stt-transcribing' : ''}`}
+                    onClick={isStt && sttStatus === 'recording' ? stopStt : startStt}
+                    disabled={isStt && sttStatus === 'transcribing'}
+                    title={isStt ? 'Stop recording' : 'Speak to type'}
+                  >
+                    {isStt && sttStatus === 'transcribing' ? '⏳' : '🎤'}
+                  </button>
                   <button className="sbtn" onClick={() => send()} disabled={(!input.trim() && !atts.length) || loading}>↑</button>
                 </div>
                 <p className="disc">ApexHighAI · AI-powered · All languages supported · Always verify important info with your school</p>

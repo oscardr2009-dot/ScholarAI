@@ -36,7 +36,7 @@ const QUICK_TOPICS = [
   { icon: '🔬', label: 'AP Exams', prompt: 'How do I prepare for AP exams? Which ones are worth taking?' },
   { icon: '💼', label: 'Extracurriculars', prompt: 'What extracurricular activities look best for college applications?' },
   { icon: '🧮', label: 'Math Help', prompt: "I'm struggling with high school math. What resources can help me?" },
-  { icon: '💻', label: 'Coding Intro', prompt: 'I want to learn coding as a high schooler. Where should I start and what languages should I learn?' },
+  { icon: '💻', label: 'Coding Intro', prompt: 'I want to learn coding as a high schooler. Where should I start?' },
   { icon: '🧬', label: 'Science Help', prompt: 'Help me understand key science concepts for high school biology, chemistry, and physics.' },
 ];
 const CODING_LANGS = ['Python', 'JavaScript', 'HTML/CSS', 'Java', 'C++', 'SQL', 'Scratch', 'TypeScript', 'React', 'Swift'];
@@ -60,12 +60,8 @@ Knowledge: SAT (400-1600), ACT (1-36), PSAT, AP Exams, IB, CLEP, study methods, 
 
 Tone: Warm, motivating, clear, student-friendly. Use structure, bullet points, and headers. Always encourage.`;
 
-// ─── ElevenLabs TTS ──────────────────────────────────────────────────────────
-const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY;
-const ELEVENLABS_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'; // Rachel — clear, friendly
-
+// ─── TTS via server (fixes CORS) ─────────────────────────────────────────────
 async function speakText(text, onStart, onEnd, onError) {
-  if (!ELEVENLABS_API_KEY) { onError('No ElevenLabs API key found.'); return; }
   const clean = text
     .replace(/<[^>]+>/g, '')
     .replace(/\*\*(.*?)\*\*/g, '$1')
@@ -76,16 +72,12 @@ async function speakText(text, onStart, onEnd, onError) {
     .slice(0, 4000);
   try {
     onStart();
-    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
+    const res = await fetch('/api/tts', {
       method: 'POST',
-      headers: { 'xi-api-key': ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text: clean,
-        model_id: 'eleven_multilingual_v2',
-        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: clean }),
     });
-    if (!res.ok) throw new Error(`ElevenLabs error: ${res.status}`);
+    if (!res.ok) throw new Error(`TTS error: ${res.status}`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
@@ -96,16 +88,13 @@ async function speakText(text, onStart, onEnd, onError) {
   } catch (e) { onError(e.message); }
 }
 
-// ─── ElevenLabs STT ──────────────────────────────────────────────────────────
+// ─── STT via server (fixes CORS) ─────────────────────────────────────────────
 async function transcribeAudio(audioBlob, onResult, onError) {
-  if (!ELEVENLABS_API_KEY) { onError('No ElevenLabs API key found.'); return; }
   try {
     const formData = new FormData();
     formData.append('file', audioBlob, 'recording.webm');
-    formData.append('model_id', 'scribe_v1');
-    const res = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+    const res = await fetch('/api/stt', {
       method: 'POST',
-      headers: { 'xi-api-key': ELEVENLABS_API_KEY },
       body: formData,
     });
     if (!res.ok) throw new Error(`STT error: ${res.status}`);
@@ -237,7 +226,7 @@ function MsgBubble({ msg }) {
   const isU = msg.role === 'user';
   return (
     <div className={`mrow ${isU ? 'urow' : 'arow'}`}>
-      {!isU && <div className="av aav">S</div>}
+      {!isU && <div className="av aav">A</div>}
       <div className={`bub ${isU ? 'ubub' : 'abub'}`}>
         {msg.isVoice && <div className="vtag">🎙 Voice message</div>}
         {msg.isCoding && <div className="ctag">💻 Code request</div>}
@@ -415,7 +404,7 @@ function HomePage({ onGoGrade, onGoLogin, onGoAbout, onGoChat }) {
         </div>
       </div>
       <div className="hp-input-area">
-        <div className="hp-iinner" onClick={onGoChat.bind(null, null)}>
+        <div className="hp-iinner" onClick={() => onGoChat(null)}>
           <span className="hp-input-placeholder">Ask anything… or drop a file, photo, PDF, or video</span>
           <button className="hp-send-btn">↑</button>
         </div>
@@ -613,7 +602,7 @@ function CodingPanel({ onSendPrompt, onClose }) {
           ))}
         </div>
         <textarea className="cp-ta"
-          placeholder={`Describe your ${selLang} task…\n\nExamples:\n• Write a function that calculates GPA\n• Explain what a for loop with an example\n• Help me build a simple calculator\n• Debug this code: [paste code here]`}
+          placeholder={`Describe your ${selLang} task…\n\nExamples:\n• Write a function that calculates GPA\n• Explain what a for loop is with an example\n• Help me build a simple calculator\n• Debug this code: [paste code here]`}
           value={codeTask} onChange={e => setCodeTask(e.target.value)} rows={5} />
         <div className="cp-actions">
           <button className="cp-cancel" onClick={onClose}>Cancel</button>
@@ -635,7 +624,7 @@ function ProjectPanel({ projects, onNew, onSelect, onDelete, selectedId, onClose
     setName(''); setDesc(''); setAdding(false);
   };
   return (
-    <div className="pj-panel">
+    <>
       <div className="pj-hdr">
         <span className="pj-title">📁 Projects</span>
         <button className="pj-cls" onClick={onClose}>✕</button>
@@ -665,9 +654,10 @@ function ProjectPanel({ projects, onNew, onSelect, onDelete, selectedId, onClose
           </div>
         ))}
       </div>
-    </div>
+    </>
   );
 }
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function ApexHighAI() {
   const [screen, setScreen] = useState('home');
@@ -709,36 +699,30 @@ export default function ApexHighAI() {
   const sttRecRef = useRef(null);
   const sttChunkRef = useRef([]);
 
+  // Keep a ref of chats for use inside async callbacks (avoids stale closure)
+  const chatsRef = useRef(chats);
+  useEffect(() => { chatsRef.current = chats; }, [chats]);
+
   const activeChat = chats.find(c => c.id === activeCid) || null;
   const msgs = activeChat?.msgs || [];
 
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs, loading]);
 
-  const sysP = useCallback(() => {
-    const lNote = lang !== 'auto' ? `\n\nLANGUAGE OVERRIDE: Always respond ONLY in "${LANGUAGES.find(l => l.code === lang)?.label}".` : '';
-    const gNote = grade && grade !== 'prefer_not' ? `\n\nStudent is in ${GRADE_OPTIONS.find(o => o.value === grade)?.label}. Tailor advice.` : '';
-    const pNote = activeProj ? `\n\nStudent is working on project: "${projects.find(p => p.id === activeProj)?.name || ''}". Keep context related to this project when relevant.` : '';
+  const sysP = useCallback((currentLang, currentGrade, currentActiveProj, currentProjects) => {
+    const lNote = currentLang !== 'auto' ? `\n\nLANGUAGE OVERRIDE: Always respond ONLY in "${LANGUAGES.find(l => l.code === currentLang)?.label}".` : '';
+    const gNote = currentGrade && currentGrade !== 'prefer_not' ? `\n\nStudent is in ${GRADE_OPTIONS.find(o => o.value === currentGrade)?.label}. Tailor advice.` : '';
+    const pNote = currentActiveProj ? `\n\nStudent is working on project: "${currentProjects.find(p => p.id === currentActiveProj)?.name || ''}". Keep context related to this project when relevant.` : '';
     return SYSTEM_PROMPT + lNote + gNote + pNote;
-  }, [lang, grade, activeProj, projects]);
+  }, []);
 
-  const newChat = (projId = null, initialMsg = null) => {
-    const id = uid();
-    const chat = { id, title: 'New Chat', msgs: [], projectId: projId, ts: Date.now() };
-    setChats(prev => [chat, ...prev]);
-    setActiveCid(id);
-    if (projId) setActiveProj(projId);
-    if (initialMsg) { setTimeout(() => sendWithId(id, [], initialMsg), 100); }
-    return id;
-  };
-
-  const updateChatMsgs = (cid, updater) => {
+  const updateChatMsgs = useCallback((cid, updater) => {
     setChats(prev => prev.map(c => c.id === cid ? { ...c, msgs: updater(c.msgs) } : c));
-  };
+  }, []);
 
-  const renameChat = (cid, firstMsg) => {
+  const renameChat = useCallback((cid, firstMsg) => {
     const title = firstMsg.slice(0, 40) + (firstMsg.length > 40 ? '…' : '');
     setChats(prev => prev.map(c => c.id === cid ? { ...c, title } : c));
-  };
+  }, []);
 
   const processFiles = useCallback(async (files) => {
     const res = [];
@@ -817,39 +801,26 @@ export default function ApexHighAI() {
   };
   const stopStt = () => { sttRecRef.current?.stop(); setIsStt(false); };
 
-  const sendVoice = async () => {
-    const cid = activeCid || newChat(activeProj);
-    const vm = { role: 'user', content: '[Voice message]', isVoice: true };
-    updateChatMsgs(cid, m => [...m, vm]);
-    setLoading(true);
-    try {
-      const r = await fetch('/api/chat', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 1000, system: sysP(), messages: [{ role: 'user', content: 'Student sent a voice message. Warmly acknowledge and ask what they need help with.' }] }),
-      });
-      const d = await r.json();
-      updateChatMsgs(cid, m => [...m, { role: 'assistant', content: d.content?.map(b => b.text || '').join('') || 'Got your voice message! What can I help with?' }]);
-    } catch {
-      updateChatMsgs(cid, m => [...m, { role: 'assistant', content: 'Got your voice message! What can I help with?' }]);
-    }
-    setLoading(false);
-  };
-
-  const sendWithId = async (cid, prevMsgs, txt, isCoding = false) => {
-    const imgs = atts.filter(a => a.isImage);
-    const pdfs = atts.filter(a => a.isPDF);
-    const vids = atts.filter(a => a.isVideo);
-    const others = atts.filter(a => !a.isImage && !a.isPDF && !a.isVideo);
+  // ── Core send function ────────────────────────────────────────────────────
+  const sendWithId = useCallback(async (cid, prevMsgs, txt, isCoding = false, currentLang, currentGrade, currentActiveProj, currentProjects) => {
+    const currentAtts = atts;
+    const imgs = currentAtts.filter(a => a.isImage);
+    const pdfs = currentAtts.filter(a => a.isPDF);
+    const vids = currentAtts.filter(a => a.isVideo);
+    const others = currentAtts.filter(a => !a.isImage && !a.isPDF && !a.isVideo);
     const um = {
       role: 'user',
       content: txt || (vids.length ? 'Please analyze this video.' : imgs.length ? 'Please analyze these images.' : pdfs.length ? 'Please review this PDF.' : 'Please review this file.'),
-      images: imgs.map(a => a.dataUrl), pdfs: pdfs.map(a => a.name),
-      videos: vids.map(a => ({ name: a.name, thumb: a.thumb })), files: others.map(a => a.name), isCoding,
+      images: imgs.map(a => a.dataUrl),
+      pdfs: pdfs.map(a => a.name),
+      videos: vids.map(a => ({ name: a.name, thumb: a.thumb })),
+      files: others.map(a => a.name),
+      isCoding,
     };
     const allMsgs = [...prevMsgs, um];
-    updateChatMsgs(cid, _ => allMsgs);
-    if (prevMsgs.length === 0) renameChat(cid, txt);
+    setChats(prev => prev.map(c => c.id === cid ? { ...c, msgs: allMsgs, title: prevMsgs.length === 0 && txt ? (txt.slice(0, 40) + (txt.length > 40 ? '…' : '')) : c.title } : c));
     setAtts([]); setLoading(true);
+
     const buildC = (m) => {
       const parts = [];
       m.images?.forEach(dataUrl => {
@@ -865,52 +836,101 @@ export default function ApexHighAI() {
       if (parts.length === 1 && parts[0].type === 'text') return parts[0].text;
       return parts;
     };
+
     try {
       const apiMsgs = allMsgs.map(m => ({ role: m.role, content: buildC(m) }));
       const r = await fetch('/api/chat', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 1500, system: sysP(), messages: apiMsgs }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-5',
+          max_tokens: 1500,
+          system: sysP(currentLang, currentGrade, currentActiveProj, currentProjects),
+          messages: apiMsgs,
+        }),
       });
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
       const d = await r.json();
-      const reply = d.content?.map(b => b.text || '').join('') || "I'm having trouble. Please try again!";
-      updateChatMsgs(cid, m => [...m, { role: 'assistant', content: reply }]);
-    } catch {
-      updateChatMsgs(cid, m => [...m, { role: 'assistant', content: 'Something went wrong. Please try again!' }]);
+      if (d.error) throw new Error(d.error.message || 'API error');
+      const reply = d.content?.map(b => b.text || '').join('') || "I'm having trouble right now. Please try again!";
+      setChats(prev => prev.map(c => c.id === cid ? { ...c, msgs: [...allMsgs, { role: 'assistant', content: reply }] } : c));
+    } catch (e) {
+      setChats(prev => prev.map(c => c.id === cid ? { ...c, msgs: [...allMsgs, { role: 'assistant', content: `Something went wrong: ${e.message}. Please try again!` }] } : c));
     }
     setLoading(false);
     setTimeout(() => inputRef.current?.focus(), 100);
+  }, [atts, sysP]);
+
+  const sendVoice = async () => {
+    const cid = activeCid || (() => {
+      const id = uid();
+      const chat = { id, title: 'Voice Message', msgs: [], projectId: activeProj, ts: Date.now() };
+      setChats(prev => [chat, ...prev]);
+      setActiveCid(id);
+      return id;
+    })();
+    const vm = { role: 'user', content: '[Voice message — transcription not available]', isVoice: true };
+    setChats(prev => prev.map(c => c.id === cid ? { ...c, msgs: [...(c.msgs || []), vm] } : c));
+    setLoading(true);
+    try {
+      const r = await fetch('/api/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 1000, system: sysP(lang, grade, activeProj, projects), messages: [{ role: 'user', content: 'Student sent a voice message. Warmly acknowledge and ask what they need help with today.' }] }),
+      });
+      const d = await r.json();
+      const reply = d.content?.map(b => b.text || '').join('') || 'Got your voice message! What can I help you with?';
+      setChats(prev => prev.map(c => c.id === cid ? { ...c, msgs: [...(c.msgs || []), vm, { role: 'assistant', content: reply }] } : c));
+    } catch {
+      setChats(prev => prev.map(c => c.id === cid ? { ...c, msgs: [...(c.msgs || []), vm, { role: 'assistant', content: 'Got your voice message! What can I help you with?' }] } : c));
+    }
+    setLoading(false);
   };
 
   const send = async (override, isCoding = false) => {
     const txt = override || input.trim();
     if ((!txt && !atts.length) || loading) return;
     setInput('');
+
+    // Create chat if needed — do it synchronously before the async call
     let cid = activeCid;
+    let currentMsgs = [];
     if (!cid) {
       cid = uid();
-      const chat = { id: cid, title: 'New Chat', msgs: [], projectId: activeProj, ts: Date.now() };
-      setChats(prev => [chat, ...prev]); setActiveCid(cid);
+      const chat = { id: cid, title: txt ? txt.slice(0, 40) + (txt.length > 40 ? '…' : '') : 'New Chat', msgs: [], projectId: activeProj, ts: Date.now() };
+      setChats(prev => [chat, ...prev]);
+      setActiveCid(cid);
+    } else {
+      currentMsgs = chatsRef.current.find(c => c.id === cid)?.msgs || [];
     }
-    const cur = chats.find(c => c.id === cid);
-    await sendWithId(cid, cur?.msgs || [], txt, isCoding);
+    await sendWithId(cid, currentMsgs, txt, isCoding, lang, grade, activeProj, projects);
   };
 
   const onKey = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
 
-  const createProject = p => { setProjects(prev => [p, ...prev]); setActiveProj(p.id); setShowProj(false); newChat(p.id); };
+  const createProject = p => { setProjects(prev => [p, ...prev]); setActiveProj(p.id); setShowProj(false); };
   const deleteProject = id => { setProjects(prev => prev.filter(p => p.id !== id)); if (activeProj === id) setActiveProj(null); };
   const selectProject = id => {
     setActiveProj(id); setShowProj(false);
     const pChat = chats.find(c => c.projectId === id);
-    if (pChat) setActiveCid(pChat.id); else newChat(id);
+    if (pChat) setActiveCid(pChat.id);
+    else {
+      const newId = uid();
+      const chat = { id: newId, title: 'New Chat', msgs: [], projectId: id, ts: Date.now() };
+      setChats(prev => [chat, ...prev]);
+      setActiveCid(newId);
+    }
   };
 
   const handleHomeQuickTopic = (prompt) => {
     const welcome = "Hey there! 👋 I'm **ApexHighAI** — your personal high school AI. You can chat, drop files, take photos, upload videos, write code, or manage projects. *I respond in any language!*";
     const id = uid();
-    const chat = { id, title: prompt ? 'New Chat' : 'Welcome', msgs: [{ role: 'assistant', content: welcome }], ts: Date.now() };
-    setChats([chat]); setActiveCid(id); setScreen('chat');
-    if (prompt) { setTimeout(() => sendWithId(id, [{ role: 'assistant', content: welcome }], prompt), 200); }
+    const chat = { id, title: prompt ? prompt.slice(0, 40) : 'Welcome', msgs: [{ role: 'assistant', content: welcome }], ts: Date.now() };
+    setChats([chat]);
+    setActiveCid(id);
+    setScreen('chat');
+    if (prompt) {
+      setTimeout(() => sendWithId(id, [{ role: 'assistant', content: welcome }], prompt, false, 'auto', '', null, []), 200);
+    }
   };
 
   const handleGoLogin = () => setScreen('login');
@@ -933,7 +953,7 @@ export default function ApexHighAI() {
     const chat = { id, title: 'Welcome', msgs: [{ role: 'assistant', content: welcome }], ts: Date.now() };
     setChats([chat]); setActiveCid(id); setScreen('chat');
     if (pendingPrompt) {
-      setTimeout(() => sendWithId(id, [{ role: 'assistant', content: welcome }], pendingPrompt), 150);
+      setTimeout(() => sendWithId(id, [{ role: 'assistant', content: welcome }], pendingPrompt, false, l, g, null, []), 150);
       setPendingPrompt(null);
     }
   };
@@ -1300,7 +1320,7 @@ export default function ApexHighAI() {
       .pj-create:disabled{opacity:.4;cursor:not-allowed;}
       .pj-list{flex:1;overflow-y:auto;padding:.5rem .7rem;}
       .pj-empty{text-align:center;color:var(--mu);font-size:.85rem;padding:2rem 1rem;}
-      .pj-item{display:flex;align-items:center;gap:.6rem;padding:.65rem .7rem;border-radius:11px;cursor:pointer;transition:all .14px;border:1px solid transparent;}
+      .pj-item{display:flex;align-items:center;gap:.6rem;padding:.65rem .7rem;border-radius:11px;cursor:pointer;transition:all .14s;border:1px solid transparent;}
       .pj-item:hover{background:rgba(255,255,255,.04);border-color:var(--border);}
       .pj-item.pj-sel{background:rgba(245,200,66,.07);border-color:rgba(245,200,66,.2);}
       .pj-item-icon{font-size:1.2rem;flex-shrink:0;}
@@ -1346,7 +1366,7 @@ export default function ApexHighAI() {
         <div className="modal">
           <div className="cam-box">
             <div className="cam-hdr">
-              <span className="cam-title">📸 Camera — unlimited photos</span>
+              <span className="cam-title">📸 Camera</span>
               <button className="cam-cls" onClick={closeCam}>✕</button>
             </div>
             <video ref={camRef} className="cam-vid" muted playsInline />
@@ -1361,7 +1381,7 @@ export default function ApexHighAI() {
         </div>
       )}
 
-      {showCode && <CodingPanel onSendPrompt={t => { send(t, true); }} onClose={() => setShowCode(false)} />}
+      {showCode && <CodingPanel onSendPrompt={t => send(t, true)} onClose={() => setShowCode(false)} />}
 
       {showProj && (
         <div className="pj-panel" onClick={e => { if (e.target.className === 'pj-panel') setShowProj(false); }}>
@@ -1384,7 +1404,12 @@ export default function ApexHighAI() {
                 <div className="sb-logo-ic">🎓</div>
                 <span className="sb-logo-tx">ApexHighAI</span>
               </div>
-              <button className="sb-new" onClick={() => { const id = newChat(activeProj); setActiveCid(id); }}>✏️ New Chat</button>
+              <button className="sb-new" onClick={() => {
+                const id = uid();
+                const chat = { id, title: 'New Chat', msgs: [], projectId: activeProj, ts: Date.now() };
+                setChats(prev => [chat, ...prev]);
+                setActiveCid(id);
+              }}>✏️ New Chat</button>
               <div className="sb-actions">
                 <button className={`sb-action${showProj ? ' active' : ''}`} onClick={() => setShowProj(true)}>📁 Projects</button>
                 <button className="sb-action" onClick={() => setShowCode(true)}>💻 Code</button>
@@ -1487,7 +1512,7 @@ export default function ApexHighAI() {
                   {msgs.map((m, i) => <MsgBubble key={i} msg={m} />)}
                   {loading && (
                     <div className="trow">
-                      <div className="av aav">S</div>
+                      <div className="av aav">A</div>
                       <div className="tdots"><Dots /></div>
                     </div>
                   )}
@@ -1505,14 +1530,14 @@ export default function ApexHighAI() {
                   <button className="tbtn code-btn" onClick={() => setShowCode(true)}>💻 Code</button>
                   <button className="tbtn" style={{ borderColor: 'rgba(245,200,66,.28)', color: 'var(--gd)' }} onClick={() => setShowProj(true)}>📁 Projects</button>
                   <button className="tbtn" onClick={() => fileRef.current?.click()}>📂 File</button>
-                  <input ref={fileRef} type="file" multiple accept=".pdf,.doc,.docx,.txt,.csv,.pptx,.xlsx" style={{ display: 'none' }} onChange={e => processFiles(Array.from(e.target.files))} />
+                  <input ref={fileRef} type="file" multiple accept=".pdf,.doc,.docx,.txt,.csv,.pptx,.xlsx" style={{ display: 'none' }} onChange={e => { processFiles(Array.from(e.target.files)); e.target.value = ''; }} />
                   <button className="tbtn" onClick={() => pdfRef.current?.click()}>📄 PDF</button>
-                  <input ref={pdfRef} type="file" multiple accept="application/pdf" style={{ display: 'none' }} onChange={e => processFiles(Array.from(e.target.files))} />
+                  <input ref={pdfRef} type="file" multiple accept="application/pdf" style={{ display: 'none' }} onChange={e => { processFiles(Array.from(e.target.files)); e.target.value = ''; }} />
                   <button className="tbtn" onClick={() => photoRef.current?.click()}>🖼 Photo</button>
-                  <input ref={photoRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => processFiles(Array.from(e.target.files))} />
+                  <input ref={photoRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => { processFiles(Array.from(e.target.files)); e.target.value = ''; }} />
                   <button className="tbtn" onClick={openCam}>📷 Camera</button>
                   <button className="tbtn" onClick={() => vidRef.current?.click()}>🎬 Video</button>
-                  <input ref={vidRef} type="file" multiple accept="video/*" style={{ display: 'none' }} onChange={e => processFiles(Array.from(e.target.files))} />
+                  <input ref={vidRef} type="file" multiple accept="video/*" style={{ display: 'none' }} onChange={e => { processFiles(Array.from(e.target.files)); e.target.value = ''; }} />
                   {!isRec ? (
                     <button className="tbtn" onClick={startRec}>🎙 Voice</button>
                   ) : (
